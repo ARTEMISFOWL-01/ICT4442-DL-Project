@@ -1,145 +1,100 @@
-# 1D-CNN Sentiment Analysis
+# Sentiment Analysis on IMDb Reviews — A Four-Model Comparison
 
-A deep learning sentiment analysis project built on the IMDb movie review dataset. This repository focuses on a 1D Convolutional Neural Network (CNN) for binary sentiment classification, with architecture choices inspired by classic text CNN models for sentence-level sentiment classification.
+**Course:** ICT 4442 — Deep Learning  
+**Institution:** School of Computer Engineering, MIT Manipal (MAHE)
 
-The project was designed as part of a comparative study of multiple neural network architectures, including MLP, 1D-CNN, BiLSTM, and DistilBERT. This repository contains the 1D-CNN implementation and evaluation workflow.
+---
 
-## Overview
+## What This Project Is About
 
-Sentiment analysis is the task of determining whether a given text expresses a positive or negative opinion. In this project, we classify movie reviews from the IMDb dataset as either:
+We picked a straightforward question: *how much does architecture choice matter for sentiment classification?*
 
-- Positive
-- Negative
+To find out, we trained four different deep learning models on the same dataset (IMDb movie reviews, 50k reviews, binary positive/negative) using the same train/val/test split and the same evaluation metrics. The four models are:
 
-The model treats reviews as sequences of tokens and uses a CNN over word embeddings to capture local n-gram patterns such as trigrams, four-grams, and five-grams.
+| Model | Type | Who Built It |
+|-------|------|--------------|
+| MLP | Feed-forward baseline (bag of averaged embeddings) | Y Kedarnath Chowdary |
+| 1D-CNN | Multi-kernel convolutional (Kim 2014 style) | Abhay Pratap Singh |
+| BiLSTM | Bidirectional recurrent | Rallapalli Dheeraj Chowdary |
+| DistilBERT | Fine-tuned pretrained Transformer | D. Vishwatej |
 
-## Project Goals
+The point isn't just to get a number — it's to understand *why* different architectures give different results on the same data.
 
-- Build a strong text-classification baseline using a 1D CNN
-- Prepare and preprocess IMDb movie reviews
-- Train and validate a sentiment classifier
-- Evaluate model performance using standard metrics
-- Save training history, predictions, and ROC/Confusion Matrix outputs
+## Results (Quick Look)
 
-## Model Architecture
+| Model | Test Accuracy | Test F1 | Test AUC |
+|-------|:---:|:---:|:---:|
+| MLP | 88.27% | 0.8799 | 0.9495 |
+| 1D-CNN | 88.27% | 0.8809 | 0.9515 |
+| BiLSTM | 80.62% | 0.8211 | 0.8786 |
+| DistilBERT | **90.71%** | **0.9069** | **0.9691** |
 
-The implemented model uses:
+DistilBERT wins, but the interesting part is that the simple MLP and CNN are not far behind — and they're way cheaper to train. The BiLSTM struggled with generalization on this particular setup (more on that in the report).
 
-- Tokenized review sequences
-- Embedding layer
-- Spatial dropout regularization
-- Three parallel 1D convolution branches with kernel sizes 3, 4, and 5
-- Global max pooling after each convolution branch
-- Concatenation of pooled features
-- Dense classification head with dropout and L2 regularization
-- Sigmoid output for binary classification
+## Repo Structure
 
-This architecture follows the idea that different convolution kernel sizes capture different local context lengths in the review text.
+```
+├── MLP.ipynb           # MLP model — training, eval, plots
+├── CNN.ipynb           # 1D-CNN model
+├── Bilstm.ipynb        # BiLSTM model
+├── DistillBert.ipynb   # DistilBERT fine-tuning
+├── figures/            # All plots (training curves, confusion matrices, ROC)
+├── interim_report.tex  # Part B interim report (LaTeX source)
+├── synopsis.tex        # Synopsis (LaTeX source)
+├── synopsis.pdf        # Synopsis (compiled)
+└── Details.txt         # Team info and dataset link
+```
 
 ## Dataset
 
-The project uses the IMDb movie review dataset from Stanford AI Lab:
+**IMDb Large Movie Review Dataset** by Maas et al. (2011)  
+50,000 reviews — 25k train, 25k test — balanced 50/50 positive/negative.
 
-- Dataset: ACL IMDb
-- Task: Binary sentiment classification
-- Classes: 2 (Positive / Negative)
-- Train examples: 20,000
-- Validation examples: 5,000
-- Test examples: 25,000
+Download: https://ai.stanford.edu/~amaas/data/sentiment/
 
-The notebook automatically downloads the dataset if it is not already present.
+We split the 25k training set into 20k train + 5k validation (stratified, `random_state=42`). The 25k test set is kept completely separate — no peeking.
 
-## Repository Contents
+## Preprocessing
 
-- `CNN.ipynb` — complete notebook containing data loading, preprocessing, model training, evaluation, plotting, and error analysis
-- `README.md` — project overview and usage instructions
+All non-Transformer models share the same Keras tokenizer (fitted on train data only, saved to `shared/tokenizer.pkl`):
+- Vocab size: 20,000
+- Max sequence length: 512 tokens (covers ~92% of reviews)
+- Post-padding, post-truncation
 
-## Requirements
+DistilBERT uses its own WordPiece tokenizer (`distilbert-base-uncased`) with max length 256 (GPU memory constraint on a T4).
 
-This project is implemented with Python and TensorFlow.
+## Models at a Glance
 
-Required packages:
+**MLP** — Embedding → SpatialDropout1D(0.2) → GlobalAveragePooling → Dense(64) → Sigmoid. Dead simple, no sequence info. ~2.6M params. Adam, lr=1e-3. 13 epochs, early stopped at epoch 10.
 
-- Python 3.9+
-- TensorFlow 2.x
-- scikit-learn
-- NumPy
-- matplotlib
-- seaborn
+**1D-CNN** — Embedding → SpatialDropout1D(0.3) → three parallel Conv1D branches (kernel sizes 3, 4, 5, 64 filters each) → GlobalMaxPool → concat → Dense(64) → Sigmoid. ~2.7M params. Adam, lr=1e-3. 6 epochs, early stopped at epoch 3.
 
-Install dependencies:
+**BiLSTM** — Embedding (mask_zero) → SpatialDropout1D(0.3) → Bidirectional LSTM(64) → Dense(64) → Sigmoid. ~2.7M params. Adam, lr=5e-4. 5 epochs, early stopped at epoch 2. Slow to train (~11 min/epoch on CPU).
 
-```bash
-pip install -q tensorflow scikit-learn matplotlib seaborn
-```
+**DistilBERT** — `distilbert-base-uncased` + classification head, full fine-tuning. ~67M params. AdamW, lr=2e-5, linear warmup (10%), gradient clipping. 4 epochs, early stopped at epoch 2. Trained on T4 GPU.
 
-## Running the Project
+## How to Run
 
-### Option 1: Google Colab
+Each notebook is self-contained and was run on Google Colab. Open any `.ipynb`, connect to a runtime, and run all cells. The notebooks handle dataset download, preprocessing, training, and evaluation.
 
-Open the notebook in Google Colab and run all cells sequentially.
+**Requirements** (auto-installed in the notebooks):
+- TensorFlow 2.x (MLP, CNN, BiLSTM)
+- PyTorch + HuggingFace Transformers (DistilBERT)
+- scikit-learn, matplotlib, seaborn
 
-The notebook is configured to:
+## Team
 
-- mount Google Drive
-- create local folders for datasets and outputs
-- download the IMDb dataset
-- load a shared tokenizer
-- train the CNN model
-- save training metrics and plots
+| Name | Reg. No. | Model |
+|------|----------|-------|
+| D. Vishwatej | 230953220 | DistilBERT |
+| Abhay Pratap Singh | 230911522 | 1D-CNN |
+| Rallapalli Dheeraj Chowdary | 230911530 | BiLSTM |
+| Y Kedarnath Chowdary | 230911176 | MLP |
 
-### Option 2: Local Jupyter Notebook
+## References
 
-1. Clone the repository
-2. Open `CNN.ipynb` in Jupyter or VS Code Notebook support
-3. Run the cells in order
-4. Make sure the required directories and paths match your environment
-
-## Training and Evaluation
-
-The notebook includes:
-
-- Model construction and summary
-- Early stopping and learning-rate reduction callbacks
-- Validation and test evaluation
-- Accuracy, precision, recall, F1-score, and ROC-AUC metrics
-- Confusion matrix and ROC visualizations
-- Error analysis of misclassified samples
-
-## Results
-
-The model achieved strong results on the validation and test sets.
-
-| Split | Accuracy | Precision | Recall | F1-Score | AUC |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Validation | 0.8850 | 0.8953 | 0.8720 | 0.8835 | 0.9545 |
-| Test | 0.8827 | 0.8946 | 0.8676 | 0.8809 | 0.9515 |
-
-These results show a reliable baseline for sentiment classification using a 1D CNN architecture.
-
-## Notes
-
-- The notebook expects a Drive-based workflow in the original project setup, including a shared tokenizer path.
-- If you are running this outside the original environment, you may need to adjust file paths and dataset loading logic.
-- The repository is notebook-centric and is best used as an educational or experimentation project rather than a library/package.
-
-## Future Improvements
-
-Possible next steps for this project include:
-
-- Comparing the 1D CNN with BiLSTM and DistilBERT baselines
-- Hyperparameter tuning
-- Adding cross-validation
-- Saving model artifacts for reproducible inference
-- Converting the notebook into a reusable Python training pipeline
-
-## License
-
-No explicit license file is included in the repository. If you plan to reuse or distribute this project, check whether the dataset or project structure requires attribution or specific licensing terms.
-
-## Acknowledgements
-
-- IMDb dataset by Stanford AI Lab
-- TensorFlow and Keras for deep learning implementation
-- scikit-learn for evaluation metrics
-
+1. Maas et al., "Learning Word Vectors for Sentiment Analysis," ACL 2011 — [paper](https://aclanthology.org/P11-1015/)
+2. Kim, "Convolutional Neural Networks for Sentence Classification," EMNLP 2014 — [paper](https://aclanthology.org/D14-1181/)
+3. Hochreiter & Schmidhuber, "Long Short-Term Memory," Neural Computation, 1997 — [paper](https://doi.org/10.1162/neco.1997.9.8.1735)
+4. Devlin et al., "BERT: Pre-training of Deep Bidirectional Transformers," NAACL 2019 — [paper](https://aclanthology.org/N19-1423/)
+5. Sanh et al., "DistilBERT," NeurIPS Workshop 2019 — [paper](https://arxiv.org/abs/1910.01108)
