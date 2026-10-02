@@ -1,91 +1,173 @@
-# Sentiment Analysis on IMDb Reviews — A Four-Model Comparison
+# Sentiment Analysis on IMDb Reviews: A Four-Model Comparison
 
-**Course:** ICT 4442 — Deep Learning  
-**Institution:** School of Computer Engineering, MIT Manipal (MAHE)
+A deep learning project comparing four neural-network architectures for binary sentiment classification on the IMDb movie review dataset.
 
----
+This project explores how model choice affects performance on the same data, while keeping the preprocessing, data split, and evaluation protocol consistent across all models.
 
-## What This Project Is About
+## Project Overview
 
-We picked a straightforward question: *how much does architecture choice matter for sentiment classification?*
+The task is to classify movie reviews as either:
 
-To find out, we trained four different deep learning models on the same dataset (IMDb movie reviews, 50k reviews, binary positive/negative) using the same train/val/test split and the same evaluation metrics. The four models are:
+- Positive
+- Negative
 
-| Model | Type | Who Built It |
-|-------|------|--------------|
-| MLP | Feed-forward baseline (bag of averaged embeddings) | Y Kedarnath Chowdary |
-| 1D-CNN | Multi-kernel convolutional (Kim 2014 style) | Abhay Pratap Singh |
-| BiLSTM | Bidirectional recurrent | Rallapalli Dheeraj Chowdary |
-| DistilBERT | Fine-tuned pretrained Transformer | D. Vishwatej |
+The dataset is the IMDb Large Movie Review Dataset, containing 50,000 reviews. We use the standard binary sentiment setup, with the 25k test set held out for final evaluation.
 
-The point isn't just to get a number — it's to understand *why* different architectures give different results on the same data.
+We compare the following models:
 
-## Results (Quick Look)
+| Model | Type | Description |
+| --- | --- | --- |
+| MLP | Feed-forward baseline | Simple embedding-based model with global pooling |
+| 1D-CNN | Convolutional neural network | Multi-kernel text CNN for local n-gram learning |
+| BiLSTM | Recurrent neural network | Bidirectional sequence model for context capture |
+| DistilBERT | Transformer | Fine-tuned pretrained language model |
 
-| Model | Test Accuracy | Test F1 | Test AUC |
-|-------|:---:|:---:|:---:|
-| MLP | 88.27% | 0.8799 | 0.9495 |
-| 1D-CNN | 88.27% | 0.8809 | 0.9515 |
-| BiLSTM | 80.62% | 0.8211 | 0.8786 |
-| DistilBERT | **90.71%** | **0.9069** | **0.9691** |
+The goal is not only to maximize accuracy, but also to understand how architecture impacts learning, generalization, and efficiency.
 
-DistilBERT wins, but the interesting part is that the simple MLP and CNN are not far behind — and they're way cheaper to train. The BiLSTM struggled with generalization on this particular setup (more on that in the report).
+## Why This Project Matters
 
-## Repo Structure
+Different architectures make different assumptions about the input:
 
-```
-├── MLP.ipynb           # MLP model — training, eval, plots
-├── CNN.ipynb           # 1D-CNN model
-├── Bilstm.ipynb        # BiLSTM model
-├── DistillBert.ipynb   # DistilBERT fine-tuning
-├── figures/            # All plots (training curves, confusion matrices, ROC)
-├── interim_report.tex  # Part B interim report (LaTeX source)
-├── synopsis.tex        # Synopsis (LaTeX source)
-├── synopsis.pdf        # Synopsis (compiled)
-└── Details.txt         # Team info and dataset link
+- MLP treats reviews as pooled bag-of-words style patterns
+- 1D-CNN detects local word patterns and n-grams
+- BiLSTM processes reviews as sequences and captures longer dependencies
+- DistilBERT leverages pretrained language knowledge and contextualized embeddings
+
+Because all models are trained and evaluated under the same conditions, the results are directly comparable.
+
+## Repository Structure
+
+```text
+.
+├── MLP.ipynb           # MLP model training and evaluation
+├── CNN.ipynb           # 1D-CNN model training and evaluation
+├── Bilstm.ipynb        # BiLSTM model training and evaluation
+├── DistillBert.ipynb   # DistilBERT fine-tuning and evaluation
+├── README.md           # Project documentation
+├── figures/            # Plots and visual results (if generated locally)
+├── interim_report.tex   # Interim report source
+├── synopsis.tex        # Synopsis source
+├── synopsis.pdf        # Compiled synopsis PDF
+├── Details.txt         # Project/team information and dataset details
+└── .gitignore
 ```
 
 ## Dataset
 
-**IMDb Large Movie Review Dataset** by Maas et al. (2011)  
-50,000 reviews — 25k train, 25k test — balanced 50/50 positive/negative.
+The project uses the IMDb dataset from Stanford AI Lab:
 
-Download: https://ai.stanford.edu/~amaas/data/sentiment/
+- Dataset: IMDb Large Movie Review Dataset
+- Task: Binary sentiment classification
+- Reviews: 50,000 total
+- Balanced classes: positive and negative
+- Train/Val/Test split: 20k train, 5k validation, 25k test
 
-We split the 25k training set into 20k train + 5k validation (stratified, `random_state=42`). The 25k test set is kept completely separate — no peeking.
+The validation set is used for early stopping and model selection, while the test set remains untouched until the final model comparison.
 
 ## Preprocessing
 
-All non-Transformer models share the same Keras tokenizer (fitted on train data only, saved to `shared/tokenizer.pkl`):
-- Vocab size: 20,000
-- Max sequence length: 512 tokens (covers ~92% of reviews)
-- Post-padding, post-truncation
+The non-transformer models share a common preprocessing pipeline:
 
-DistilBERT uses its own WordPiece tokenizer (`distilbert-base-uncased`) with max length 256 (GPU memory constraint on a T4).
+- Tokenizer trained only on training data
+- Vocabulary size: 20,000
+- Maximum sequence length: 512
+- Post-padding and post-truncation
+- Shared preprocessing across MLP, CNN, and BiLSTM
+
+For DistilBERT, the model uses the Hugging Face tokenizer based on distilbert-base-uncased and a shorter maximum sequence length due to resource constraints.
 
 ## Models at a Glance
 
-**MLP** — Embedding → SpatialDropout1D(0.2) → GlobalAveragePooling → Dense(64) → Sigmoid. Dead simple, no sequence info. ~2.6M params. Adam, lr=1e-3. 13 epochs, early stopped at epoch 10.
+### MLP
 
-**1D-CNN** — Embedding → SpatialDropout1D(0.3) → three parallel Conv1D branches (kernel sizes 3, 4, 5, 64 filters each) → GlobalMaxPool → concat → Dense(64) → Sigmoid. ~2.7M params. Adam, lr=1e-3. 6 epochs, early stopped at epoch 3.
+- Embedding layer followed by spatial dropout
+- Global average pooling
+- Dense hidden layer and sigmoid output
+- Simple baseline with low computational cost
+- Useful to quantify how much sequence structure matters
 
-**BiLSTM** — Embedding (mask_zero) → SpatialDropout1D(0.3) → Bidirectional LSTM(64) → Dense(64) → Sigmoid. ~2.7M params. Adam, lr=5e-4. 5 epochs, early stopped at epoch 2. Slow to train (~11 min/epoch on CPU).
+### 1D-CNN
 
-**DistilBERT** — `distilbert-base-uncased` + classification head, full fine-tuning. ~67M params. AdamW, lr=2e-5, linear warmup (10%), gradient clipping. 4 epochs, early stopped at epoch 2. Trained on T4 GPU.
+- Embedding layer
+- Spatial dropout regularization
+- Three parallel convolution branches with kernel sizes 3, 4, and 5
+- Global max pooling and feature concatenation
+- Dense classification head
+- Strong baseline for local text pattern learning
+
+### BiLSTM
+
+- Embedding layer with masking
+- Spatial dropout
+- Bidirectional LSTM encoder
+- Dense classification layer
+- Captures temporal context and long-range dependencies in sentences
+
+### DistilBERT
+
+- Fine-tuned DistilBERT backbone
+- Classification head added on top
+- Pretrained contextual representations
+- Strongest performing model in the comparison
+
+## Quick Results
+
+The following results are based on the final held-out test set:
+
+| Model | Test Accuracy | Test F1 | Test AUC |
+| --- | ---: | ---: | ---: |
+| MLP | 88.27% | 0.8799 | 0.9495 |
+| 1D-CNN | 88.27% | 0.8809 | 0.9515 |
+| BiLSTM | 80.62% | 0.8211 | 0.8786 |
+| DistilBERT | 90.71% | 0.9069 | 0.9691 |
+
+### Interpretation
+
+- DistilBERT performs best, as expected, because it leverages pretrained language understanding.
+- MLP and 1D-CNN are competitive, despite being much simpler and cheaper to train.
+- BiLSTM underperforms in this setup, suggesting that the chosen configuration or training setup was less suitable for this dataset.
+- The performance gap between classic models and the transformer is meaningful, but not overwhelmingly large in this project.
 
 ## How to Run
 
-Each notebook is self-contained and was run on Google Colab. Open any `.ipynb`, connect to a runtime, and run all cells. The notebooks handle dataset download, preprocessing, training, and evaluation.
+Each notebook is self-contained and designed to run in a Google Colab environment. The notebooks handle:
 
-**Requirements** (auto-installed in the notebooks):
-- TensorFlow 2.x (MLP, CNN, BiLSTM)
-- PyTorch + HuggingFace Transformers (DistilBERT)
-- scikit-learn, matplotlib, seaborn
+- dataset download
+- preprocessing
+- model creation
+- training and validation
+- metrics computation
+- confusion matrix and ROC visualization
+
+### Requirements
+
+For the TensorFlow-based notebooks:
+
+- Python 3.x
+- TensorFlow 2.x
+- NumPy
+- scikit-learn
+- matplotlib
+- seaborn
+
+For DistilBERT:
+
+- PyTorch
+- Hugging Face Transformers
+- sentencepiece / tokenizer dependencies as required
+
+### Typical Workflow
+
+1. Open any notebook in Jupyter or Google Colab.
+2. Ensure the required dependencies are installed.
+3. Run all cells in order.
+4. Observe training logs, accuracy curves, and evaluation plots.
+5. Compare metrics across the four models.
 
 ## Team
 
-| Name | Reg. No. | Model |
-|------|----------|-------|
+| Name | Register Number | Model |
+| --- | --- | --- |
 | D. Vishwatej | 230953220 | DistilBERT |
 | Abhay Pratap Singh | 230911522 | 1D-CNN |
 | Rallapalli Dheeraj Chowdary | 230911530 | BiLSTM |
@@ -93,8 +175,15 @@ Each notebook is self-contained and was run on Google Colab. Open any `.ipynb`, 
 
 ## References
 
-1. Maas et al., "Learning Word Vectors for Sentiment Analysis," ACL 2011 — [paper](https://aclanthology.org/P11-1015/)
-2. Kim, "Convolutional Neural Networks for Sentence Classification," EMNLP 2014 — [paper](https://aclanthology.org/D14-1181/)
-3. Hochreiter & Schmidhuber, "Long Short-Term Memory," Neural Computation, 1997 — [paper](https://doi.org/10.1162/neco.1997.9.8.1735)
-4. Devlin et al., "BERT: Pre-training of Deep Bidirectional Transformers," NAACL 2019 — [paper](https://aclanthology.org/N19-1423/)
-5. Sanh et al., "DistilBERT," NeurIPS Workshop 2019 — [paper](https://arxiv.org/abs/1910.01108)
+1. Maas, Andrew, et al. "Learning Word Vectors for Sentiment Analysis." ACL, 2011.
+2. Kim, Yoon. "Convolutional Neural Networks for Sentence Classification." EMNLP, 2014.
+3. Hochreiter, Sepp, and Jürgen Schmidhuber. "Long Short-Term Memory." Neural Computation, 1997.
+4. Devlin, Jacob, et al. "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding." NAACL, 2019.
+5. Sanh, Victor, et al. "DistilBERT, a distilled version of BERT." NeurIPS Workshop, 2019.
+
+## Conclusion
+
+This repository demonstrates that model architecture matters for sentiment analysis, but the value of deeper and more complex models depends on the problem setup, dataset size, and training constraints.
+
+The comparison shows that classic architectures such as MLP and 1D-CNN can still perform very competitively, while transformer-based methods like DistilBERT provide the strongest overall performance.
+
